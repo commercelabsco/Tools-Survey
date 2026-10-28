@@ -128,7 +128,6 @@ textarea{width:100%;min-height:90px;font:inherit;padding:12px 14px;border:1px so
     <span class="status" id="status">Select your tools, then submit.</span>
     <div class="btns">
       <button class="btn ghost hidden" id="cancel">Cancel</button>
-      <button class="btn hidden" id="edit">Update my responses</button>
       <button class="btn" id="submit">Submit</button>
     </div>
   </div>
@@ -172,7 +171,7 @@ $("search").addEventListener("input",e=>{
 });
 
 const SAVED_KEY="toolSurveyAnswers";
-const editBtn=$("edit"), cancelBtn=$("cancel"), modal=$("modal");
+const cancelBtn=$("cancel"), modal=$("modal");
 let saved=null;
 try{ saved=JSON.parse(localStorage.getItem(SAVED_KEY)||"null"); }catch(e){}
 
@@ -185,27 +184,31 @@ function fill(d){
 }
 function lock(){
   $("form").classList.add("locked");
-  btn.classList.add("hidden"); cancelBtn.classList.add("hidden"); editBtn.classList.remove("hidden");
-  statusEl.textContent="Your answers are submitted.";
+  btn.classList.add("hidden"); cancelBtn.classList.add("hidden");
+  statusEl.textContent="Your answers are submitted. Thank you!";
 }
 function unlock(){
   $("form").classList.remove("locked");
-  editBtn.classList.add("hidden"); btn.classList.remove("hidden");
+  btn.classList.remove("hidden");
   btn.textContent="Save changes"; cancelBtn.classList.remove("hidden");
   statusEl.textContent="Make your changes, then save.";
   $("fullName").focus();
 }
-function openModal(updated){
-  $("mTitle").textContent=updated?"Responses updated!":"Answers submitted!";
-  $("mText").textContent=updated?"Your changes have been saved.":"Thanks for filling out the survey. You can update your responses anytime.";
+const MSG={
+  new:["Answers submitted!","Thanks for filling out the survey. You can update your responses anytime."],
+  updated:["Responses updated!","Your changes have been saved."],
+  returning:["You’ve already answered","Thanks for filling out the survey. Want to change anything?"]
+};
+function openModal(mode){
+  $("mTitle").textContent=MSG[mode][0];
+  $("mText").textContent=MSG[mode][1];
   modal.classList.remove("hidden"); $("mClose").focus();
 }
 const closeModal=()=>modal.classList.add("hidden");
 
-if(saved){ fill(saved); lock(); }
+if(saved){ fill(saved); lock(); openModal("returning"); }
 
-editBtn.addEventListener("click", unlock);
-cancelBtn.addEventListener("click", ()=>{ if(saved){ fill(saved); lock(); } });
+cancelBtn.addEventListener("click", ()=>{ if(saved){ fill(saved); lock(); openModal("returning"); } });
 $("mClose").addEventListener("click", closeModal);
 $("mEdit").addEventListener("click", ()=>{ closeModal(); unlock(); });
 modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
@@ -221,10 +224,10 @@ btn.addEventListener("click", async ()=>{
   btn.disabled=true; statusEl.textContent="Saving…";
   try{
     await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({id:rid,name,department,tools,other})});
-    const updated=!!saved;
+    const mode=saved?"updated":"new";
     saved={name,department,tools,other};
     try{ localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); }catch(e){}
-    lock(); openModal(updated);
+    lock(); openModal(mode);
   }catch(e){ statusEl.textContent="Couldn’t save. Please check your connection and try again."; }
   finally{ btn.disabled=false; }
 });
