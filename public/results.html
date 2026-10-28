@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Survey Results | CommerceLabs</title>
+<link rel="icon" href="/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <img class="logo" alt="CommerceLabs" src="/logo.png">
+  <h1>Survey results</h1>
+
+  <div id="loginView" class="login">
+    <p class="lede">Enter the admin password to view responses.</p>
+    <input id="pw" type="password" placeholder="Password">
+    <button class="btn" id="loginBtn">View results</button>
+    <p class="status" id="loginStatus"></p>
+  </div>
+
+  <div id="resultsView" class="hidden">
+    <div class="actions">
+      <button class="btn" id="csvBtn">Download CSV</button>
+      <button class="btn ghost" id="refreshBtn">Refresh</button>
+    </div>
+    <div class="section"><h2 id="respCount">Responses</h2><div class="rows" id="tally"></div></div>
+    <div class="section"><h2>By department</h2><div class="rows" id="deptTally"></div></div>
+    <div class="section"><h2>Other tools mentioned</h2><div class="rows" id="otherTally"></div></div>
+    <div class="section"><h2>Individual responses</h2><div id="respList"></div></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let key=sessionStorage.getItem("adminKey")||"", data=[];
+
+function barRows(el, entries, total){
+  el.innerHTML="";
+  if(!entries.length){ el.innerHTML='<p class="empty">Nothing yet.</p>'; return; }
+  entries.forEach(([name,n])=>{
+    const r=document.createElement("div"); r.className="row";
+    const a=document.createElement("span"); a.textContent=name;
+    const t=document.createElement("div"); t.className="track";
+    const f=document.createElement("div"); f.className="fill"; f.style.width=(total?n/total*100:0)+"%"; t.append(f);
+    const c=document.createElement("span"); c.className="num"; c.textContent=n;
+    r.append(a,t,c); el.append(r);
+  });
+}
+function tally(list){ const m=new Map(); list.forEach(x=>{ const k=[...m.keys()].find(y=>y.toLowerCase()===x.toLowerCase())||x; m.set(k,(m.get(k)||0)+1); }); return [...m].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])); }
+
+function render(){
+  const total=data.length;
+  $("respCount").textContent=total+(total===1?" response":" responses");
+  barRows($("tally"), tally(data.flatMap(r=>r.tools||[])), total);
+  barRows($("deptTally"), tally(data.map(r=>r.department).filter(Boolean)), total);
+  barRows($("otherTally"), tally(data.flatMap(r=>r.other||[])), total);
+  const list=$("respList"); list.innerHTML="";
+  if(!total){ list.innerHTML='<p class="empty">No responses yet.</p>'; return; }
+  data.slice().sort((a,b)=>(b.submittedAt||0)-(a.submittedAt||0)).forEach(r=>{
+    const d=document.createElement("div"); d.className="resp";
+    const b=document.createElement("b"); b.textContent=(r.name||"Unnamed")+(r.department?" – "+r.department:"");
+    const s=document.createElement("div"); s.textContent=[...(r.tools||[]),...(r.other||[]).map(o=>o+" (other)")].join(", ")||"—";
+    const sm=document.createElement("small"); sm.textContent=r.submittedAt?new Date(r.submittedAt).toLocaleString():"";
+    d.append(b,s,sm); list.append(d);
+  });
+}
+
+async function load(){
+  $("loginStatus").textContent="Loading…";
+  const r=await fetch("/api/results",{headers:{"x-admin-key":key}});
+  if(r.status===401){ $("loginStatus").textContent="Wrong password."; sessionStorage.removeItem("adminKey"); return; }
+  if(!r.ok){ $("loginStatus").textContent="Couldn’t load results."; return; }
+  data=(await r.json()).responses;
+  sessionStorage.setItem("adminKey",key);
+  $("loginView").classList.add("hidden"); $("resultsView").classList.remove("hidden");
+  render();
+}
+$("loginBtn").onclick=()=>{ key=$("pw").value; load(); };
+$("pw").addEventListener("keydown",e=>{ if(e.key==="Enter"){ key=$("pw").value; load(); } });
+$("refreshBtn").onclick=load;
+$("csvBtn").onclick=()=>{
+  const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const rows=[["Name","Department","Tools","Other tools","Submitted"]].concat(
+    data.map(r=>[r.name,r.department,(r.tools||[]).join("; "),(r.other||[]).join("; "),r.submittedAt?new Date(r.submittedAt).toISOString():""]));
+  const blob=new Blob([rows.map(r=>r.map(esc).join(",")).join("\n")],{type:"text/csv"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="tool-survey-results.csv"; a.click();
+};
+if(key) load();
+</script>
+</body>
+</html>
