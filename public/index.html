@@ -59,6 +59,9 @@
 </div>
 
 <script>
+// Paste your Apps Script Web app URL here
+const SHEET_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
 const TOOLS = ["Amazon Web Services","n8n","ChatGPT","Datarova","Dropbox","Fivetran","Frame.io","Kalodata","Lucid","Make","Twilio","Zapier","Zendesk","JungleScout","Sellerise","Pixelfy","Lumen5","Shutterstock","Cruva","ExpressVPN","Fastmoss","Foreplay","Klaviyo","Loom","Data Dive","SimpleSat","Keepa","Helium 10","Canva","Sprout Payroll","Slack","GS1","GoDaddy","DreamHost","Intellivy","Power BI","Midjourney","Squarespace","Tello","Expandfi","SellerSprite","Render","Keeper Security","Claude Code","Zoom","Scraper API","Higgsfield","GitHub","Vercel","Railway"].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:"base"}));
 const $ = id => document.getElementById(id);
 const grid = $("grid"), statusEl = $("status"), btn = $("submit");
@@ -89,8 +92,9 @@ btn.addEventListener("click", async ()=>{
   if(!tools.length && !other.length){ statusEl.textContent="Select at least one tool."; return; }
   btn.disabled=true; statusEl.textContent="Saving…";
   try{
-    const r=await fetch("/api/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:rid,name,department,tools,other})});
-    if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||"Save failed");
+    const r=await fetch(SHEET_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({id:rid,name,department,tools,other})});
+    const out=await r.json().catch(()=>({}));
+    if(!out.ok) throw new Error(out.error||"Save failed");
     statusEl.textContent="Thanks! Your response is saved. You can update it anytime.";
     btn.textContent="Update response";
   }catch(e){ statusEl.textContent="Couldn’t save: "+e.message; }
