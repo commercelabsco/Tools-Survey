@@ -68,6 +68,17 @@ textarea{width:100%;min-height:90px;font:inherit;padding:12px 14px;border:1px so
 .login{max-width:360px}
 .login input{width:100%;font:inherit;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);margin:10px 0}
 .actions{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+
+.locked .who,.locked .toolbar,.locked .grid,.locked .other{opacity:.6;pointer-events:none}
+.bar .btns{display:flex;gap:10px}
+.modal-bg{position:fixed;inset:0;background:rgba(40,38,34,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal{background:var(--surface);border-radius:16px;max-width:420px;width:100%;padding:32px 28px 24px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.18);animation:pop .25s ease-out}
+.modal .check{width:56px;height:56px;border-radius:50%;background:var(--accent);margin:0 auto 16px;display:flex;align-items:center;justify-content:center}
+.modal h2{margin:0 0 6px;font-size:22px;font-weight:600}
+.modal p{margin:0 0 22px;color:var(--muted)}
+.modal .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.modal{animation:none}}
 </style>
 </head>
 <body>
@@ -76,7 +87,7 @@ textarea{width:100%;min-height:90px;font:inherit;padding:12px 14px;border:1px so
   <h1>Which tools do you use?</h1>
   <p class="lede">Tick every app you use for work. If something you use isn’t listed, add it in the box at the bottom.</p>
 
-  <section>
+  <section id="form">
     <div class="who">
       <div class="field">
         <label for="fullName">Your name</label>
@@ -115,7 +126,23 @@ textarea{width:100%;min-height:90px;font:inherit;padding:12px 14px;border:1px so
 <div class="bar">
   <div class="in">
     <span class="status" id="status">Select your tools, then submit.</span>
-    <button class="btn" id="submit">Submit</button>
+    <div class="btns">
+      <button class="btn ghost hidden" id="cancel">Cancel</button>
+      <button class="btn hidden" id="edit">Update my responses</button>
+      <button class="btn" id="submit">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal">
+    <div class="check"><svg width="28" height="28" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h2 id="mTitle">Answers submitted!</h2>
+    <p id="mText">Thanks for filling out the survey. You can update your responses anytime.</p>
+    <div class="btns">
+      <button class="btn ghost" id="mEdit">Update my responses</button>
+      <button class="btn" id="mClose">Done</button>
+    </div>
   </div>
 </div>
 
@@ -144,6 +171,46 @@ $("search").addEventListener("input",e=>{
   grid.querySelectorAll(".tool").forEach(el=>el.classList.toggle("hidden", q && !el.dataset.name.includes(q)));
 });
 
+const SAVED_KEY="toolSurveyAnswers";
+const editBtn=$("edit"), cancelBtn=$("cancel"), modal=$("modal");
+let saved=null;
+try{ saved=JSON.parse(localStorage.getItem(SAVED_KEY)||"null"); }catch(e){}
+
+function fill(d){
+  $("fullName").value=d.name||""; $("dept").value=d.department||"";
+  const set=new Set(d.tools||[]);
+  grid.querySelectorAll("input").forEach(i=>i.checked=set.has(i.value));
+  $("otherTools").value=(d.other||[]).join(", ");
+  updateCount();
+}
+function lock(){
+  $("form").classList.add("locked");
+  btn.classList.add("hidden"); cancelBtn.classList.add("hidden"); editBtn.classList.remove("hidden");
+  statusEl.textContent="Your answers are submitted.";
+}
+function unlock(){
+  $("form").classList.remove("locked");
+  editBtn.classList.add("hidden"); btn.classList.remove("hidden");
+  btn.textContent="Save changes"; cancelBtn.classList.remove("hidden");
+  statusEl.textContent="Make your changes, then save.";
+  $("fullName").focus();
+}
+function openModal(updated){
+  $("mTitle").textContent=updated?"Responses updated!":"Answers submitted!";
+  $("mText").textContent=updated?"Your changes have been saved.":"Thanks for filling out the survey. You can update your responses anytime.";
+  modal.classList.remove("hidden"); $("mClose").focus();
+}
+const closeModal=()=>modal.classList.add("hidden");
+
+if(saved){ fill(saved); lock(); }
+
+editBtn.addEventListener("click", unlock);
+cancelBtn.addEventListener("click", ()=>{ if(saved){ fill(saved); lock(); } });
+$("mClose").addEventListener("click", closeModal);
+$("mEdit").addEventListener("click", ()=>{ closeModal(); unlock(); });
+modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !modal.classList.contains("hidden")) closeModal(); });
+
 btn.addEventListener("click", async ()=>{
   const name=$("fullName").value.trim(), department=$("dept").value;
   const tools=[...grid.querySelectorAll("input:checked")].map(i=>i.value);
@@ -153,12 +220,12 @@ btn.addEventListener("click", async ()=>{
   if(!tools.length && !other.length){ statusEl.textContent="Select at least one tool."; return; }
   btn.disabled=true; statusEl.textContent="Saving…";
   try{
-    if(!SHEET_URL.startsWith("https://script.google.com/")) throw new Error("the Apps Script URL isn’t set");
-    // no-cors: Google's redirect doesn't allow the page to read the reply, but the answer still gets saved
     await fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({id:rid,name,department,tools,other})});
-    statusEl.textContent="Thanks! Your response is saved. You can update it anytime.";
-    btn.textContent="Update response";
-  }catch(e){ statusEl.textContent="Couldn’t save: "+e.message; }
+    const updated=!!saved;
+    saved={name,department,tools,other};
+    try{ localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); }catch(e){}
+    lock(); openModal(updated);
+  }catch(e){ statusEl.textContent="Couldn’t save. Please check your connection and try again."; }
   finally{ btn.disabled=false; }
 });
 </script>
